@@ -66,6 +66,7 @@ type SenderOption func(*senderOption)
 type senderOption struct {
 	chunkSize   int
 	tarDoneChan chan<- bool
+	inclusions  []string
 }
 
 func newSenderOption(opts ...SenderOption) *senderOption {
@@ -81,6 +82,14 @@ func newSenderOption(opts ...SenderOption) *senderOption {
 func WithTarDoneChan(ch chan<- bool) SenderOption {
 	return func(opt *senderOption) {
 		opt.tarDoneChan = ch
+	}
+}
+
+// WithInclusions limits the CMP tar to the given paths relative to rootPath.
+// Directory paths include all files beneath them; file paths include only that file.
+func WithInclusions(inclusions []string) SenderOption {
+	return func(opt *senderOption) {
+		opt.inclusions = inclusions
 	}
 }
 
@@ -112,8 +121,12 @@ func SendRepoStream(ctx context.Context, appPath, rootPath string, sender Stream
 }
 
 func GetCompressedRepoAndMetadata(rootPath string, appPath string, env []string, excludedGlobs []string, opt *senderOption) (*os.File, *pluginclient.AppStreamRequest, error) {
-	// compress all files in rootPath in tgz
-	tgz, filesWritten, checksum, err := tgzstream.CompressFiles(rootPath, nil, excludedGlobs)
+	var inclusions []string
+	if opt != nil {
+		inclusions = opt.inclusions
+	}
+	// compress files in rootPath in tgz (optionally filtered by inclusions)
+	tgz, filesWritten, checksum, err := tgzstream.CompressFiles(rootPath, inclusions, excludedGlobs)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error compressing repo files: %w", err)
 	}
